@@ -37,12 +37,16 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 	uint8_t	mux_addr;
 //	uint8_t	eep_addr;
 	uint8_t	sensor_addr;
+	uint8_t	sensor_type;											// temp value storage for type val read from eeprom
+
 	uint32_t	start = millis();
-	
+
 	Serial.printf ("discovering external sensors...\n");
 
 	for (m = 0; m < MAX_MUXES; m++)
 		{
+		sensor_type = TMP275;								// spoof until eeprom code written
+
 		mux_addr = PCA9548A_BASE_MIN | (m & 7);						// make 9548A slave address from lowest base addr and mux array index
 		mux[m].imux.setup (mux_addr, Wire1, (char*)"Wire1");		// initialize this instance
 		mux[m].imux.begin (I2C_PINS_29_30, I2C_RATE_100);
@@ -58,6 +62,7 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 			{
 			if (SUCCESS != mux[m].imux.control_write (mux[m].imux.port[p]))		// enable access to mux[m].port[p]
 				Serial.printf ("mux[%d].imux.control_write (mux[%d].imux.port[%d]) fail (0x%.02X)", m, m, p, mux[m].imux.port[p]);
+
 			for (s = 0; s < MAX_SENSORS; s++)
 				{
 //				eep_addr = FRAM_BASE_MIN | (s & 7);					// make eeprom slave address from lowest base addr and sensor array index
@@ -69,23 +74,39 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 //					// destructor here?
 //					continue;
 //					}
-				sensor_addr = TMP275_BASE_MIN + (s & 7);			// make sensor slave address from lowest base addr and sensor array index
-//Serial.printf ("mux[%d].port[%d].sensor[%d]\n", m, p, s);
-				mux[m].port[p].sensor[s].itmp275.setup (sensor_addr, Wire1, (char*)"Wire1");	// initialize this sensor instance
-				mux[m].port[p].sensor[s].itmp275.begin (I2C_PINS_29_30, I2C_RATE_100);
-				if (SUCCESS != mux[m].port[p].sensor[s].itmp275.init (TMP275_CFG_RES12))
-					{
-					mux[m].port[p].sensor[s].itmp275.~Systronix_TMP275();	// destructor this instance
-					Serial.printf ("\tmux[%d].port[%d].sensor[%d] tmp275 not detected\n", m, p, s);
-					break;
-					}
-				// set temp sensor pointer register to point at temperature register here or elsewhere?
-				mux[m].has_sensors = true;							// flag to indicate that there is a mux[m] that has sensors
-				mux[m].port[p].has_sensors = true;					// flag to indicate that port[p] has sensors
-				mux[m].port[p].sensor[s].addr = sensor_addr;		// if not 0, then sensor[s] exists
-				Serial.printf ("\tmux[%d].port[%d].sensor[%d] tmp275 detected\n", m, p, s);
+// here we read eeprom to discover sensor type; switch on that value and attempt to instantiate
 
-				// fill sensor struct parameters (whatever they are) here
+				switch (sensor_type)
+					{
+					case TMP275:
+						sensor_addr = TMP275_BASE_MIN + (s & 7);			// make sensor slave address from lowest base addr and sensor array index
+		//Serial.printf ("mux[%d].port[%d].sensor[%d]\n", m, p, s);
+						mux[m].port[p].sensor[s].itmp275.setup (sensor_addr, Wire1, (char*)"Wire1");	// initialize this sensor instance
+						mux[m].port[p].sensor[s].itmp275.begin (I2C_PINS_29_30, I2C_RATE_100);
+						if (SUCCESS != mux[m].port[p].sensor[s].itmp275.init (TMP275_CFG_RES12))
+							{
+							mux[m].port[p].sensor[s].itmp275.~Systronix_TMP275();	// destructor this instance
+							Serial.printf ("\tmux[%d].port[%d].sensor[%d] tmp275 not detected\n", m, p, s);
+							break;
+							}
+						// set temp sensor pointer register to point at temperature register here or elsewhere?
+						mux[m].has_sensors = true;							// flag to indicate that there is a mux[m] that has sensors
+						mux[m].port[p].has_sensors = true;					// flag to indicate that port[p] has sensors
+						mux[m].port[p].sensor[s].addr = sensor_addr;		// if not 0, then sensor[s] exists
+						mux[m].port[p].sensor[s].type = TMP275;				// if not 0, then sensor[s] exists
+						Serial.printf ("\tmux[%d].port[%d].sensor[%d] tmp275 detected\n", m, p, s);
+
+						// fill sensor struct parameters (whatever they are) here
+						sensor_type = 0; //undo spoof
+						break;
+
+					case 0:		//
+						break;
+					default:
+						Serial.printf ("sensor type not recognized\n");
+					}
+				if (0 == sensor_type)
+					break;
 				}
 			if (false == mux[m].port[p].has_sensors)
 				break;
@@ -178,7 +199,8 @@ uint8_t SALT_ext_sensors::sensor_scan (void)
 							}
 						else											// there are (more) sensors
 							{
-							mux[m].port[p].sensor[s].itmp275.get_temperature_data();	// get the sensor's data
+							if (TMP275 == mux[m].port[p].sensor[s].type)
+								mux[m].port[p].sensor[s].itmp275.get_data();	// get the sensor's data
 							}
 						}
 					}
@@ -186,22 +208,22 @@ uint8_t SALT_ext_sensors::sensor_scan (void)
 			}
 		}
 
-	for (m = 0; m < MAX_MUXES; m++)												// here we discover mux-mounted sensors
+	for (m = 0; m < MAX_MUXES; m++)										// here we discover mux-mounted sensors
 		{
-		if (mux[m].exists)														// on muxes that exist
+		if (mux[m].exists)												// on muxes that exist
 			{
-			if (SUCCESS != mux[m].imux.control_write (mux[m].imux.port[7]))		// enable access to mux[m].port[7]
+			if (SUCCESS != mux[m].imux.control_write (mux[m].imux.port[7]))	// enable access to mux[m].port[7]
 				{
 				Serial.printf ("mux[%d].imux.control_write (mux[%d].imux.port[7]) fail (0x%.02X)", m, m, mux[m].imux.port[7]);
-				break;															// serious problem if we can't switch the multiplexer  TODO: what to do?
+				break;													// serious problem if we can't switch the multiplexer  TODO: what to do?
 				}
 			if (mux[m].installed_sensors & TMP275)
-				mux[m].itmp275.get_temperature_data();								// get the sensor's data
+				mux[m].itmp275.get_temperature_data();					// get the sensor's data
 
 //			if (mux[m].installed_sensors & MS8607)
-//				mux[m].ims8607.get_temperature_data();								// get the sensor's data
+//				mux[m].ims8607.get_data();								// get the sensor's data
 //			else if (mux[m].installed_sensors & HDC1080)
-//				mux[m].ihdc1080.get_temperature_data();								// get the sensor's data
+//				mux[m].ihdc1080.get_data();								// get the sensor's data
 			}
 		}
 
@@ -209,7 +231,7 @@ uint8_t SALT_ext_sensors::sensor_scan (void)
 	}
 
 
-//---------------------------< T M P 2 7 5 _ D A T A _ P T R _ G E T >----------------------------------------------
+//---------------------------< T M P 2 7 5 _ D A T A _ P T R _ G E T >----------------------------------------
 //
 // returns the address of a TMP275 sensor's data struct or NULL
 //
@@ -222,3 +244,19 @@ Systronix_TMP275::data_t* SALT_ext_sensors::tmp275_data_ptr_get (uint8_t m, uint
 		return &mux[m].port[p].sensor[s].itmp275.data;				// return a pointer to the data struct
 	return NULL;													// NULL pointer else
 	}
+
+
+//---------------------------< M U X _ T M P 2 7 5 _ D A T A _ P T R _ G E T >--------------------------------
+//
+// returns the address of the mux-mounted TMP275 sensor's data struct or NULL
+//
+// Supports tmp275 sensors only
+//
+
+Systronix_TMP275::data_t* SALT_ext_sensors::mux_tmp275_data_ptr_get (uint8_t m)
+	{
+	if (mux[m].installed_sensors & TMP275)							// if there is a sensor at this location
+		return &mux[m].itmp275.data;								// return a pointer to the data struct
+	return NULL;													// NULL pointer else
+	}
+

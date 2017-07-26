@@ -74,6 +74,7 @@ class SALT_ext_sensors
 		uint8_t		sensor_discover (void);
 		uint8_t		sensor_scan (void);
 		Systronix_TMP275::data_t*	tmp275_data_ptr_get (uint8_t m, uint8_t p, uint8_t s);
+		Systronix_TMP275::data_t*	mux_tmp275_data_ptr_get (uint8_t m);
 	};
 
 // We shall constrain the i2c slave address of each mux to be the 9548A base address + the mux[m] array index m
