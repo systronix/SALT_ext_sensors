@@ -155,9 +155,9 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 
 //---------------------------< S E N S O R _ S C A N >--------------------------------------------------------
 //
-// This function scans the sensors and call each sensor's get_temperature_data() function to fill that sensor's
+// This function scans the sensors and calls each sensor's get_temperature_data() function to fill that sensor's
 // data struct.  Scanning begins at mux[0].port[0].sensor[0] and continues until all external sensors have been
-// queried.  This function does not scan the 
+// queried.
 // TODO: what about the mux-mounted sensors on port[7]?  Because these are 'different', handle them elsewhere?
 // TODO: How to map physical sensor location to the electrical sensor location?
 //
@@ -208,7 +208,7 @@ uint8_t SALT_ext_sensors::sensor_scan (void)
 			}
 		}
 
-	for (m = 0; m < MAX_MUXES; m++)										// here we discover mux-mounted sensors
+	for (m = 0; m < MAX_MUXES; m++)										// here we scan mux-mounted sensors
 		{
 		if (mux[m].exists)												// on muxes that exist
 			{
@@ -220,7 +220,7 @@ uint8_t SALT_ext_sensors::sensor_scan (void)
 			if (mux[m].installed_sensors & TMP275)
 				mux[m].itmp275.get_temperature_data();					// get the sensor's data
 
-//			if (mux[m].installed_sensors & MS8607)
+//			if (mux[m].installed_sensors & MS8607)						// only one of these
 //				mux[m].ims8607.get_data();								// get the sensor's data
 //			else if (mux[m].installed_sensors & HDC1080)
 //				mux[m].ihdc1080.get_data();								// get the sensor's data
