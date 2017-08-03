@@ -7,6 +7,19 @@
 
 #include <SALT_ext_sensors.h>
 
+
+//---------------------------< P I N G E X >------------------------------------------------------------------
+//
+//
+//
+
+uint8_t SALT_ext_sensors::pingex (uint8_t addr, i2c_t3 wire)
+	{
+	wire.beginTransmission (addr);				// set the device slave address
+	return wire.endTransmission();						// send slave address; returns SUCCESS if the address was acked
+	}
+
+
 //---------------------------< S E N S O R _ D I S C O V E R >------------------------------------------------
 //
 // Scan through the mux[].port[].sensor[] struct and interrogate the external i2c net for sensor node eeproms.
@@ -27,6 +40,12 @@
 // TODO: How to map physical sensor location to the electrical sensor location?  There is no map; we define the
 // physical and electrical locations.  See table on sheet 2 of the mux schematics.
 //
+// eeprom mapping?
+// eeprom is 4kx8 and has 128 32-byte pages.  page 0 identifies the assembly
+//	page 0:
+//	  addr: 0: assembly name; 8 char not null terminated but zero-filled
+//			1
+
 
 uint8_t SALT_ext_sensors::sensor_discover (void)
 	{
@@ -35,10 +54,11 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 	uint8_t	s;				// indexer into sensor
 
 	uint8_t	mux_addr;
-//	uint8_t	eep_addr;
+	uint8_t	eep_addr;
 	uint8_t	sensor_addr;
 	uint8_t	sensor_type;											// temp value storage for type val read from eeprom
-
+	boolean	break_flag=false;	// used when breaking out of switch should cause break out of sensor for loop
+	
 	uint32_t	start = millis();
 
 	Serial.printf ("discovering external sensors...\n");
@@ -48,14 +68,16 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 		sensor_type = TMP275;								// spoof until eeprom code written
 
 		mux_addr = PCA9548A_BASE_MIN | (m & 7);						// make 9548A slave address from lowest base addr and mux array index
-		mux[m].imux.setup (mux_addr, Wire1, (char*)"Wire1");		// initialize this instance
-		mux[m].imux.begin (I2C_PINS_29_30, I2C_RATE_100);
-		if (SUCCESS != mux[m].imux.init ())							// can we init()?
+		if (SUCCESS != pingex (mux_addr, Wire1))
 			{
 			Serial.printf ("\tmux[%d] not detected\n", m);
-			mux[m].imux.~Systronix_PCA9548A();						// destructor this instance
-			break;													// no response from this imux instance so we're done
+			break;
 			}
+
+		mux[m].imux.setup (mux_addr, Wire1, (char*)"Wire1");		// initialize this instance
+		mux[m].imux.begin (I2C_PINS_29_30, I2C_RATE_100);
+		mux[m].imux.init ();
+
 		mux[m].exists = true;										// so we can use mux-mounted sensors even when nothing attached to mux[m] ports
 		Serial.printf ("\tmux[%d] detected\n", m);
 		for (p = 0; p < MAX_PORTS; p++)								// here only when we were able to initialize a mux
@@ -65,30 +87,37 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 
 			for (s = 0; s < MAX_SENSORS; s++)
 				{
-//				eep_addr = FRAM_BASE_MIN | (s & 7);					// make eeprom slave address from lowest base addr and sensor array index
-////				mux[m].port[p].sensor[s].ieep.setup (eep_addr, Wire1, (char*)"Wire1");
-//				mux[m].port[p].sensor[s].ieep.setup (eep_addr);		// this one because fram library not yet Wire1 aware
-//				mux[m].port[p].sensor[s].ieep.begin ();
-//				if (SUCCESS != mux[m].port[p].sensor[s].ieep.init ())
-//					{
-//					// destructor here?
-//					continue;
-//					}
-// here we read eeprom to discover sensor type; switch on that value and attempt to instantiate
+				eep_addr = EEP_BASE_MIN | (s & 7);					// make eeprom slave address from lowest base addr and sensor array index
+				if (SUCCESS != pingex (eep_addr, Wire1))
+					{
+					Serial.printf ("\tmux[%d].port[%d].sensor[%d] eeprom not detected\n", m, p, s);
+//					continue;												// continue to next sensor or break to next port?
+					}
+				else
+					{
+					mux[m].port[p].sensor[s].ieep.setup (eep_addr, Wire1, (char*)"Wire1");
+					mux[m].port[p].sensor[s].ieep.begin (I2C_PINS_29_30, I2C_RATE_100);
+					mux[m].port[p].sensor[s].ieep.init ();
+					Serial.printf ("\tmux[%d].port[%d].sensor[%d] eeprom detected\n", m, p, s);
+					// here we read eeprom to discover sensor type; switch on that value and attempt to instantiate
+					}
 
 				switch (sensor_type)
 					{
 					case TMP275:
 						sensor_addr = TMP275_BASE_MIN + (s & 7);			// make sensor slave address from lowest base addr and sensor array index
-		//Serial.printf ("mux[%d].port[%d].sensor[%d]\n", m, p, s);
-						mux[m].port[p].sensor[s].itmp275.setup (sensor_addr, Wire1, (char*)"Wire1");	// initialize this sensor instance
-						mux[m].port[p].sensor[s].itmp275.begin (I2C_PINS_29_30, I2C_RATE_100);
-						if (SUCCESS != mux[m].port[p].sensor[s].itmp275.init (TMP275_CFG_RES12))
+						
+						if (SUCCESS != pingex (sensor_addr, Wire1))
 							{
-							mux[m].port[p].sensor[s].itmp275.~Systronix_TMP275();	// destructor this instance
 							Serial.printf ("\tmux[%d].port[%d].sensor[%d] tmp275 not detected\n", m, p, s);
+							break_flag=true;			// flag to break out of switch and then break out of sensor for loop
 							break;
 							}
+						
+						mux[m].port[p].sensor[s].itmp275.setup (sensor_addr, Wire1, (char*)"Wire1");	// initialize this sensor instance
+						mux[m].port[p].sensor[s].itmp275.begin (I2C_PINS_29_30, I2C_RATE_100);
+						mux[m].port[p].sensor[s].itmp275.init (TMP275_CFG_RES12);
+
 						// set temp sensor pointer register to point at temperature register here or elsewhere?
 						mux[m].has_sensors = true;							// flag to indicate that there is a mux[m] that has sensors
 						mux[m].port[p].has_sensors = true;					// flag to indicate that port[p] has sensors
@@ -97,7 +126,7 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 						Serial.printf ("\tmux[%d].port[%d].sensor[%d] tmp275 detected\n", m, p, s);
 
 						// fill sensor struct parameters (whatever they are) here
-						sensor_type = 0; //undo spoof
+//						sensor_type = 0; //undo spoof
 						break;
 
 					case 0:		//
@@ -105,14 +134,19 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 					default:
 						Serial.printf ("sensor type not recognized\n");
 					}
-				if (0 == sensor_type)
+				if ((break_flag) || (0 == sensor_type))
+					{
+					break_flag=false;	// used when breaking out of switch should cause break out of sensor for loop
 					break;
+					}
 				}
 			if (false == mux[m].port[p].has_sensors)
 				break;
 			}
 		mux[m].imux.control_write (PCA9548A_PORTS_DISABLE);			// disable access to mux[m] ports
 		}
+
+	Serial.printf ("discovering mux-mounted sensors...\n");
 
 	for (m = 0; m < MAX_MUXES; m++)												// here we discover mux-mounted sensors
 		{
@@ -128,9 +162,9 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 			mux[m].ieep.begin (I2C_PINS_29_30, I2C_RATE_100);
 			if (SUCCESS != mux[m].ieep.init ())
 				{
-				mux[m].ieep.~Systronix_MB85RC256V();							// destructor this instance
+				mux[m].ieep.~Systronix_M24C32();							// destructor this instance
 				Serial.printf ("\tmux[%d] eeprom not detected\n", m);
-				break;
+//				continue;
 				}
 			// TODO: read eeprom to discover what to do next
 			
@@ -146,6 +180,8 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 				break;
 				}
 			}
+		else
+			break;
 		}
 
 	Serial.printf ("discovery done (%ldmS)\n", millis() - start);

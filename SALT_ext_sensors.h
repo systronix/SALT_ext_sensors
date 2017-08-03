@@ -7,7 +7,7 @@
 
 #include <Systronix_PCA9548A.h>
 #include <Systronix_TMP275.h>
-#include <Systronix_MB85RC256V.h>		// place holder for a fram/eeprom composite library
+#include <Systronix_M24C32.h>
 
 
 //---------------------------< D E F I N E S >----------------------------------------------------------------
@@ -53,7 +53,7 @@ class SALT_ext_sensors
 			boolean							has_sensors;	// set true during discovery when sensors are discovered
 			uint8_t							installed_sensors;	// bitfield 
 			Systronix_PCA9548A				imux;			// instance the mux board; we call the destructor for unneeded instances
-			Systronix_MB85RC256V			ieep;			// instance the eeprom (this is a place-holder for now)
+			Systronix_M24C32				ieep;			// instance the eeprom (this is a place-holder for now)
 			Systronix_TMP275				itmp275;		// instance the tmp275 temp sensor
 			struct port_t									// array of multiplexer ports
 				{
@@ -61,7 +61,7 @@ class SALT_ext_sensors
 				struct sensor_t								// array of port sensors; ports are limited in this design to 3 sensors per port
 					{
 					Systronix_TMP275		itmp275;		// instance the temp sensor board 275; What to do when we have different kinds of sensors?
-//					Systronix_MB85RC256V	ieep;			// instance the temp sensor board eeprom (this is a place-holder for now)
+					Systronix_M24C32		ieep;			// instance the temp sensor board eeprom (this is a place-holder for now)
 					uint8_t					type;
 					uint8_t					addr;			// read from eep; this value is device min addr + [s] in sensor[s] (the index s)
 															// usually not required when low order eep address matches low order sensor address
@@ -73,6 +73,9 @@ class SALT_ext_sensors
 	public:
 		uint8_t		sensor_discover (void);
 		uint8_t		sensor_scan (void);
+		
+		uint8_t		pingex (uint8_t addr, i2c_t3 wire = Wire);	// pings an i2c address; Wire is default
+		
 		Systronix_TMP275::data_t*	tmp275_data_ptr_get (uint8_t m, uint8_t p, uint8_t s);
 		Systronix_TMP275::data_t*	mux_tmp275_data_ptr_get (uint8_t m);
 	};
