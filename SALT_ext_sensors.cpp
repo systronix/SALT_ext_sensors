@@ -158,19 +158,118 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 				break;															// serious problem if we can't switch the multiplexer  TODO: what to do?
 				}
 
-			mux[m].ieep.setup (MUX_EEP_ADDR, Wire1, (char*)"Wire1");			// initialize this sensor instance
-			mux[m].ieep.begin (I2C_PINS_29_30, I2C_RATE_100);
-			if (SUCCESS != mux[m].ieep.init ())
+			if (SUCCESS != pingex (MUX_EEP_ADDR, Wire1))
 				{
-				mux[m].ieep.~Systronix_M24C32();							// destructor this instance
 				Serial.printf ("\tmux[%d] eeprom not detected\n", m);
 //				continue;
 				}
+			mux[m].ieep.setup (MUX_EEP_ADDR, Wire1, (char*)"Wire1");			// initialize this sensor instance
+			mux[m].ieep.begin (I2C_PINS_29_30, I2C_RATE_100);
+			mux[m].ieep.init ();
+			Serial.printf ("\tmux[%d] eeprom detected\n", m);
+
+//=============
+/*		for (uint8_t i=0; i<10; i++)
+			{
+			mux[m].ieep.control.rd_byte = 0;
+			mux[m].ieep.set_addr16 (0);
+			mux[m].ieep.byte_read();
+			
+			Serial.printf ("1: mux[0] byte_read: 0x%.2X\n", mux[m].ieep.control.rd_byte);
+
+			mux[m].ieep.control.wr_byte = mux[m].ieep.control.rd_byte + 1;
+			mux[m].ieep.control.rd_byte = 0;
+			mux[m].ieep.set_addr16 (0);
+			mux[m].ieep.byte_write();
+
+			Serial.printf ("2: mux[0] byte_write: 0x%.2X\n", mux[m].ieep.control.wr_byte);
+
+			mux[m].ieep.control.rd_byte = 0;
+			mux[m].ieep.set_addr16 (33);
+			mux[m].ieep.byte_read();
+			Serial.printf ("3: mux[0] addr 33 byte_read: 0x%.2X\n", mux[m].ieep.control.rd_byte);
+			}
+
+			mux[m].ieep.control.rd_byte = 0;
+			mux[m].ieep.set_addr16 (0);
+			while (SUCCESS != mux[m].ieep.byte_read())
+				{
+				Serial.printf ("mux[0] error_val: 0x%.2X\n", mux[m].ieep.error.error_val);
+//				count++;
+				}
+//				Serial.printf ("mux[0] byte_read: busy\n");
+//			Serial.printf ("count: %d\n", count);
+			
+			Serial.printf ("mux[0] byte_read: 0x%.2X\n", mux[m].ieep.control.rd_byte);
+
+			mux[m].ieep.control.rd_byte = 0;
+			mux[m].ieep.set_addr16 (33);
+			mux[m].ieep.byte_read();
+			Serial.printf ("mux[0] addr 33 byte_read: 0x%.2X\n", mux[m].ieep.control.rd_byte);
+*/
+//==================
+// page write
+uint8_t buf [33] = {"AbcdefghijklmNOpqrstuvwxyZ012345"};
+			mux[m].ieep.set_addr16 (32);
+			mux[m].ieep.control.wr_buf_ptr = buf;
+			mux[m].ieep.control.rd_wr_len = 32;
+			if (SUCCESS != mux[m].ieep.page_write())
+				{
+				Serial.printf ("page write fail: 0x%.2X", mux[m].ieep.error.error_val);
+				}
+
+			memset (buf, '\0', 32);			// erase
+// read back
+/*
+delay (50);
+			mux[m].ieep.control.rd_byte = 0;
+			mux[m].ieep.set_addr16 (32);
+//			mux[m].ieep.byte_read();
+			if (SUCCESS != mux[m].ieep.byte_read())
+				{
+				Serial.printf ("byte read fail: 0x%.2X", mux[m].ieep.error.error_val);
+				}
+			buf[0] = mux[m].ieep.control.rd_byte;
+//while (1);			
+			for (uint8_t i=1; i<32; i++)
+				{
+				mux[m].ieep.control.rd_byte = 0;
+//				mux[m].ieep.current_address_read ();
+				if (SUCCESS != mux[m].ieep.current_address_read())
+					{
+					Serial.printf ("current addr read fail: 0x%.2X", mux[m].ieep.error.error_val);
+					}
+				buf[i] = mux[m].ieep.control.rd_byte;
+				Serial.printf ("0x%.2X.%d (%d)\n", mux[m].ieep.control.rd_byte, mux[m].ieep.get_addr16 (), i);
+				}
+
+			Serial.printf ("\n3: %s\n", buf);
+*/
+
+			mux[m].ieep.set_addr16 (32);
+			mux[m].ieep.control.rd_buf_ptr = buf;
+			mux[m].ieep.control.rd_wr_len = 32;
+			if (SUCCESS != mux[m].ieep.page_read())
+				{
+				Serial.printf ("page read fail: 0x%.2X", mux[m].ieep.error.error_val);
+				}
+			Serial.printf ("\n3: %s\n", buf);
+			
+
+
+//==================
 			// TODO: read eeprom to discover what to do next
 			
 			// TODO: if tests on some value(s) stored in eeprom to determine which of the three sensors to use?
 			// If we do that just what is it that gets stored in eeprom?
 			// that same value will be used by the scanner to fetch sensor data
+
+			if (SUCCESS != pingex (TMP275_SLAVE_ADDR_7, Wire1))
+				{
+				Serial.printf ("\tmux[%d] eeprom not detected\n", m);
+//				continue;
+				}
+
 			mux[m].itmp275.setup (TMP275_SLAVE_ADDR_7, Wire1, (char*)"Wire1");	// initialize this sensor instance
 			mux[m].itmp275.begin (I2C_PINS_29_30, I2C_RATE_100);
 			if (SUCCESS != mux[m].itmp275.init (TMP275_CFG_RES12))
@@ -179,6 +278,19 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 				Serial.printf ("\tmux[%d] tmp275 not detected\n", m);
 				break;
 				}
+
+			mux[m].installed_sensors = TMP275;
+			Serial.printf ("\tmux[%d] TMP275 detected\n", m);
+
+
+			if (SUCCESS != pingex (0x40, Wire1))
+				{
+				Serial.printf ("\tmux[%d] HDC1080 not detected\n", m);
+//				continue;
+				}
+
+			mux[m].installed_sensors |= HDC1080;
+			Serial.printf ("\tmux[%d] HDC1080 detected\n", m);
 			}
 		else
 			break;
