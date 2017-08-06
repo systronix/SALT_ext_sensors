@@ -58,7 +58,7 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 	uint8_t	sensor_addr;
 	uint8_t	sensor_type;											// temp value storage for type val read from eeprom
 	boolean	break_flag=false;	// used when breaking out of switch should cause break out of sensor for loop
-	
+
 	uint32_t	start = millis();
 
 	Serial.printf ("discovering external sensors...\n");
@@ -106,14 +106,14 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 					{
 					case TMP275:
 						sensor_addr = TMP275_BASE_MIN + (s & 7);			// make sensor slave address from lowest base addr and sensor array index
-						
+
 						if (SUCCESS != pingex (sensor_addr, Wire1))
 							{
 							Serial.printf ("\tmux[%d].port[%d].sensor[%d] tmp275 not detected\n", m, p, s);
 							break_flag=true;			// flag to break out of switch and then break out of sensor for loop
 							break;
 							}
-						
+
 						mux[m].port[p].sensor[s].itmp275.setup (sensor_addr, Wire1, (char*)"Wire1");	// initialize this sensor instance
 						mux[m].port[p].sensor[s].itmp275.begin (I2C_PINS_29_30, I2C_RATE_100);
 						mux[m].port[p].sensor[s].itmp275.init (TMP275_CFG_RES12);
@@ -163,137 +163,93 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 				Serial.printf ("\tmux[%d] eeprom not detected\n", m);
 //				continue;
 				}
-			mux[m].ieep.setup (MUX_EEP_ADDR, Wire1, (char*)"Wire1");			// initialize this sensor instance
-			mux[m].ieep.begin (I2C_PINS_29_30, I2C_RATE_100);
-			mux[m].ieep.init ();
-			Serial.printf ("\tmux[%d] eeprom detected\n", m);
-
-//=============
-/*		for (uint8_t i=0; i<10; i++)
-			{
-			mux[m].ieep.control.rd_byte = 0;
-			mux[m].ieep.set_addr16 (0);
-			mux[m].ieep.byte_read();
-			
-			Serial.printf ("1: mux[0] byte_read: 0x%.2X\n", mux[m].ieep.control.rd_byte);
-
-			mux[m].ieep.control.wr_byte = mux[m].ieep.control.rd_byte + 1;
-			mux[m].ieep.control.rd_byte = 0;
-			mux[m].ieep.set_addr16 (0);
-			mux[m].ieep.byte_write();
-
-			Serial.printf ("2: mux[0] byte_write: 0x%.2X\n", mux[m].ieep.control.wr_byte);
-
-			mux[m].ieep.control.rd_byte = 0;
-			mux[m].ieep.set_addr16 (33);
-			mux[m].ieep.byte_read();
-			Serial.printf ("3: mux[0] addr 33 byte_read: 0x%.2X\n", mux[m].ieep.control.rd_byte);
-			}
-
-			mux[m].ieep.control.rd_byte = 0;
-			mux[m].ieep.set_addr16 (0);
-			while (SUCCESS != mux[m].ieep.byte_read())
+			else
 				{
-				Serial.printf ("mux[0] error_val: 0x%.2X\n", mux[m].ieep.error.error_val);
-//				count++;
-				}
-//				Serial.printf ("mux[0] byte_read: busy\n");
-//			Serial.printf ("count: %d\n", count);
-			
-			Serial.printf ("mux[0] byte_read: 0x%.2X\n", mux[m].ieep.control.rd_byte);
-
-			mux[m].ieep.control.rd_byte = 0;
-			mux[m].ieep.set_addr16 (33);
-			mux[m].ieep.byte_read();
-			Serial.printf ("mux[0] addr 33 byte_read: 0x%.2X\n", mux[m].ieep.control.rd_byte);
-*/
-//==================
-// page write
-uint8_t buf [33] = {"AbcdefghijklmNOpqrstuvwxyZ012345"};
-			mux[m].ieep.set_addr16 (32);
-			mux[m].ieep.control.wr_buf_ptr = buf;
-			mux[m].ieep.control.rd_wr_len = 32;
-			if (SUCCESS != mux[m].ieep.page_write())
-				{
-				Serial.printf ("page write fail: 0x%.2X", mux[m].ieep.error.error_val);
+				mux[m].ieep.setup (MUX_EEP_ADDR, Wire1, (char*)"Wire1");			// initialize this sensor instance
+				mux[m].ieep.begin (I2C_PINS_29_30, I2C_RATE_100);
+				mux[m].ieep.init ();
+				Serial.printf ("\tmux[%d] eeprom detected\n", m);
 				}
 
-			memset (buf, '\0', 32);			// erase
-// read back
-/*
-delay (50);
-			mux[m].ieep.control.rd_byte = 0;
-			mux[m].ieep.set_addr16 (32);
-//			mux[m].ieep.byte_read();
-			if (SUCCESS != mux[m].ieep.byte_read())
-				{
-				Serial.printf ("byte read fail: 0x%.2X", mux[m].ieep.error.error_val);
-				}
-			buf[0] = mux[m].ieep.control.rd_byte;
-//while (1);			
-			for (uint8_t i=1; i<32; i++)
-				{
-				mux[m].ieep.control.rd_byte = 0;
-//				mux[m].ieep.current_address_read ();
-				if (SUCCESS != mux[m].ieep.current_address_read())
-					{
-					Serial.printf ("current addr read fail: 0x%.2X", mux[m].ieep.error.error_val);
-					}
-				buf[i] = mux[m].ieep.control.rd_byte;
-				Serial.printf ("0x%.2X.%d (%d)\n", mux[m].ieep.control.rd_byte, mux[m].ieep.get_addr16 (), i);
-				}
+			// TODO: define format of whatever information *what information is that?) will be stored in eeprom.
+			// Should the mux eeprom data format be somehow similar to the (undefined) sensor format?  How the
+			// same? How different?
+			// could include:
+			//	number of ports populated
+			//	which of the three supported sensors are mounted
+			//	????
+			//
+			// FOR NOW because we haven't specified anything:
+			//	address 0x00: mounted sensors bit field is the bitwise or of: TMP275, MS8607, HDC1080 (only one or the other of the last two - they share an address) 
+			//
+			// for now, this code will write the mounted sensors bit field:
 
-			Serial.printf ("\n3: %s\n", buf);
-*/
+//			mux[m].ieep.set_addr16 (0);
+//			mux[m].ieep.control.wr_byte = TMP275 | HDC1080;
+//			mux[m].ieep.byte_write();
 
-			mux[m].ieep.set_addr16 (32);
-			mux[m].ieep.control.rd_buf_ptr = buf;
-			mux[m].ieep.control.rd_wr_len = 32;
-			if (SUCCESS != mux[m].ieep.page_read())
-				{
-				Serial.printf ("page read fail: 0x%.2X", mux[m].ieep.error.error_val);
-				}
-			Serial.printf ("\n3: %s\n", buf);
-			
-
-
-//==================
 			// TODO: read eeprom to discover what to do next
-			
+
 			// TODO: if tests on some value(s) stored in eeprom to determine which of the three sensors to use?
 			// If we do that just what is it that gets stored in eeprom?
 			// that same value will be used by the scanner to fetch sensor data
 
-			if (SUCCESS != pingex (TMP275_SLAVE_ADDR_7, Wire1))
+			mux[m].ieep.set_addr16 (0);				// TODO: establish the true and correct address for the mounted sensors bit field
+			mux[m].ieep.byte_read();				// read the value; is it ok to just leave in the control struct?  do we need to save it off somewhere?
+
+			mux[m].installed_sensors = 0;			// init to be safe
+
+			Serial.printf ("eeprom read: 0x%.2X\n", mux[m].ieep.control.rd_byte);
+
+			if (TMP275 & mux[m].ieep.control.rd_byte)									// should we expect a 275?
 				{
-				Serial.printf ("\tmux[%d] eeprom not detected\n", m);
-//				continue;
+				if (SUCCESS != pingex (TMP275_SLAVE_ADDR_7, Wire1))						// can we ping it?
+					Serial.printf ("\tmux[%d] TMP275 specified but not detected\n", m);
+				else
+					{
+					mux[m].itmp275.setup (TMP275_SLAVE_ADDR_7, Wire1, (char*)"Wire1");	// initialize this sensor instance
+					mux[m].itmp275.begin (I2C_PINS_29_30, I2C_RATE_100);
+					if (SUCCESS != mux[m].itmp275.init (TMP275_CFG_RES12))
+						{
+						mux[m].itmp275.~Systronix_TMP275();								// destructor this instance
+						Serial.printf ("\tmux[%d] tmp275 init fail\n", m);
+						}
+					else
+						{
+						mux[m].installed_sensors = TMP275;								// note that we found and initialized TMP275
+						Serial.printf ("\tmux[%d] TMP275 initialized\n", m);
+						}
+					}
 				}
 
-			mux[m].itmp275.setup (TMP275_SLAVE_ADDR_7, Wire1, (char*)"Wire1");	// initialize this sensor instance
-			mux[m].itmp275.begin (I2C_PINS_29_30, I2C_RATE_100);
-			if (SUCCESS != mux[m].itmp275.init (TMP275_CFG_RES12))
+			if (HDC1080 & mux[m].ieep.control.rd_byte)									// should we expect a 1080?
 				{
-				mux[m].itmp275.~Systronix_TMP275();								// destructor this instance
-				Serial.printf ("\tmux[%d] tmp275 not detected\n", m);
-				break;
+				if ((SUCCESS == pingex (0x40, Wire1)) && (SUCCESS == pingex (0x76, Wire1)))		// make sure we aren't accidentally talking to MS8607 TODO: use #defines for slave addresses
+					Serial.printf ("\tmux[%d] MS8607 detected; expected HDC1080\n", m);
+				else if (SUCCESS != pingex (0x40, Wire1))
+					Serial.printf ("\tmux[%d] HDC1080 specified but not detected\n", m);
+				else		// TODO: write enough library support to fill this in
+					{
+					mux[m].installed_sensors |= HDC1080;
+					Serial.printf ("\tmux[%d] HDC1080 detected\n", m);
+					}
 				}
 
-			mux[m].installed_sensors = TMP275;
-			Serial.printf ("\tmux[%d] TMP275 detected\n", m);
-
-
-			if (SUCCESS != pingex (0x40, Wire1))
+			if (MS8607 & mux[m].ieep.control.rd_byte)										// should we expect an MS8607?
 				{
-				Serial.printf ("\tmux[%d] HDC1080 not detected\n", m);
-//				continue;
+				if ((SUCCESS == pingex (0x40, Wire1)) && (SUCCESS == pingex (0x76, Wire1)))		//  TODO: use a #define for slave addresses
+					Serial.printf ("\tmux[%d] MS8607 specified but not detected\n", m);
+				else		// TODO: write enough library support to fill this in
+					{
+					mux[m].installed_sensors |= HDC1080;
+					Serial.printf ("\tmux[%d] MS8607 detected\n", m);
+					}
 				}
-
-			mux[m].installed_sensors |= HDC1080;
-			Serial.printf ("\tmux[%d] HDC1080 detected\n", m);
 			}
 		else
 			break;
+
+		mux[m].imux.control_write (PCA9548A_PORTS_DISABLE);			// disable access to mux[m] ports
 		}
 
 	Serial.printf ("discovery done (%ldmS)\n", millis() - start);
@@ -366,13 +322,102 @@ uint8_t SALT_ext_sensors::sensor_scan (void)
 				break;													// serious problem if we can't switch the multiplexer  TODO: what to do?
 				}
 			if (mux[m].installed_sensors & TMP275)
-				mux[m].itmp275.get_temperature_data();					// get the sensor's data
+				mux[m].itmp275.get_data();								// get the sensor's data
 
 //			if (mux[m].installed_sensors & MS8607)						// only one of these
 //				mux[m].ims8607.get_data();								// get the sensor's data
 //			else if (mux[m].installed_sensors & HDC1080)
 //				mux[m].ihdc1080.get_data();								// get the sensor's data
 			}
+		}
+
+	return SUCCESS;
+	}
+
+
+//---------------------------< S H O W _ S E N S O R _ T E M P S >--------------------------------------------
+//
+// development hack to write each ext sensor temperature to habitat A UI; one temperature reading every other second
+//
+
+uint8_t SALT_ext_sensors::show_sensor_temps (void)
+	{
+	static uint8_t	m=0;				// indexer into mux
+	static uint8_t	p=0;				// indexer into port
+	static uint8_t	s=0;				// indexer into sensor
+	static uint8_t	state = 0;
+
+	if (!mux[0].exists)												// if no mux[0] we're done
+		{
+		sprintf (utils.display_text, "mux[0] missing  ");
+		utils.ui_display_update (HABITAT_A);
+		return FAIL;
+		}
+
+	switch (state)
+		{
+		case 0:		// mux[m] temp sensor
+			if (mux[m].installed_sensors & TMP275)
+				{
+				sprintf (utils.display_text, "m[%d]            %6.4f\xDF", m, mux[m].itmp275.data.deg_f);
+				utils.ui_display_update (HABITAT_A);
+				state = 1;
+				break;
+				}
+			else												// no tmp275
+				{
+				sprintf (utils.display_text, "m[%d] no TMP275", m);
+				utils.ui_display_update (HABITAT_A);
+				state = 1;
+				break;
+				}
+
+		case 1:		// mux[m].port[p].sensor[s]
+			if (mux[m].port[p].has_sensors)						// does port[p] have at least one sensor?
+				{
+				if (0 != mux[m].port[p].sensor[s].addr)			// this sensor present?
+					{
+					sprintf (utils.display_text, "m[%d].p[%d].s[%d]  %6.4f\xDF", m, p, s, mux[m].port[p].sensor[s].itmp275.data.deg_f);
+					utils.ui_display_update (HABITAT_A);		// display sensor temp
+					s++;										// next sensor
+					if (0 == mux[m].port[p].sensor[s].addr)		// does it exist?
+						{
+						s = 0;									// no, reset
+						p++;									// next port
+						if (mux[m].port[p].has_sensors)			// does it have sensors?
+							break;								// yes
+						else
+							{
+							p = 0;								// no, reset
+							m++;								// next mux
+							if (!mux[m].exists)					// is there a next mux?
+								m=0;							// no, reset
+							state = 0;							// start over
+							break;
+							}
+						}
+					}
+				else											// should never get here; port[p] has sensors but no sensor[0] address
+					{
+					sprintf (utils.display_text, "m[%d].p[%d].s[%d]  no sensor err", m, p, s);
+					utils.ui_display_update (HABITAT_A);		// display error message
+					m=0;										// reset and restart
+					p=0;
+					s=0;
+					state=0;
+					break;
+					}
+				}
+			else											// port[p] has no sensors
+				{
+				s = 0;										// reset
+				p = 0;
+				m++;										// next mux
+				if (!mux[m].exists)
+					m = 0;									// no next mux, reset
+				state = 0;
+				break;
+				}
 		}
 
 	return SUCCESS;

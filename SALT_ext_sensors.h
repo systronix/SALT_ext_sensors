@@ -8,6 +8,7 @@
 #include <Systronix_PCA9548A.h>
 #include <Systronix_TMP275.h>
 #include <Systronix_M24C32.h>
+#include <SALT_utilities.h>
 
 
 //---------------------------< D E F I N E S >----------------------------------------------------------------
@@ -75,6 +76,7 @@ class SALT_ext_sensors
 		uint8_t		sensor_scan (void);
 		
 		uint8_t		pingex (uint8_t addr, i2c_t3 wire = Wire);	// pings an i2c address; Wire is default
+		uint8_t		show_sensor_temps (void);
 		
 		Systronix_TMP275::data_t*	tmp275_data_ptr_get (uint8_t m, uint8_t p, uint8_t s);
 		Systronix_TMP275::data_t*	mux_tmp275_data_ptr_get (uint8_t m);
