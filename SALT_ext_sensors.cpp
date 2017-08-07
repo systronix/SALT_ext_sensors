@@ -180,7 +180,7 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 			//	????
 			//
 			// FOR NOW because we haven't specified anything:
-			//	address 0x00: mounted sensors bit field is the bitwise or of: TMP275, MS8607, HDC1080 (only one or the other of the last two - they share an address) 
+			//	address 0x00: mounted sensors bit field is the bitwise or of: TMP275, MS8607, HDC1080 (only one or the other of the last two - they share an address)
 			//
 			// for now, this code will write the mounted sensors bit field:
 
@@ -230,8 +230,19 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 					Serial.printf ("\tmux[%d] HDC1080 specified but not detected\n", m);
 				else		// TODO: write enough library support to fill this in
 					{
-					mux[m].installed_sensors |= HDC1080;
-					Serial.printf ("\tmux[%d] HDC1080 detected\n", m);
+					mux[m].ihdc1080.setup (Wire1, (char*)"Wire1");							// initialize this sensor instance
+					mux[m].ihdc1080.begin (I2C_PINS_29_30, I2C_RATE_100);
+					if (SUCCESS != mux[m].ihdc1080.init (MODE_T_AND_H))						// temperature and humidity mode
+//					if (SUCCESS != mux[m].ihdc1080.init (0, TRIGGER_H))						// individual mode; humidity only
+						{
+						mux[m].ihdc1080.~Systronix_HDC1080();								// destructor this instance
+						Serial.printf ("\tmux[%d] HDC1080 init fail\n", m);
+						}
+					else
+						{
+						mux[m].installed_sensors |= HDC1080;								// note that we found and initialized HDC1080
+						Serial.printf ("\tmux[%d] HDC1080 initialized\n", m);
+						}
 					}
 				}
 
@@ -326,8 +337,8 @@ uint8_t SALT_ext_sensors::sensor_scan (void)
 
 //			if (mux[m].installed_sensors & MS8607)						// only one of these
 //				mux[m].ims8607.get_data();								// get the sensor's data
-//			else if (mux[m].installed_sensors & HDC1080)
-//				mux[m].ihdc1080.get_data();								// get the sensor's data
+			if (mux[m].installed_sensors & HDC1080)
+				mux[m].ihdc1080.get_data();								// get the sensor's data
 			}
 		}
 
@@ -347,7 +358,7 @@ uint8_t SALT_ext_sensors::show_sensor_temps (void)
 	static uint8_t	s=0;				// indexer into sensor
 	static uint8_t	state = 0;
 
-	if (!mux[0].exists)												// if no mux[0] we're done
+	if (!mux[0].exists)											// if no mux[0] we're done
 		{
 		sprintf (utils.display_text, "mux[0] missing  ");
 		utils.ui_display_update (HABITAT_A);
@@ -357,27 +368,36 @@ uint8_t SALT_ext_sensors::show_sensor_temps (void)
 	switch (state)
 		{
 		case 0:		// mux[m] temp sensor
-			if (mux[m].installed_sensors & TMP275)
+			if (!mux[m].installed_sensors)						// no sensors
 				{
-				sprintf (utils.display_text, "m[%d]            %6.4f\xDF", m, mux[m].itmp275.data.deg_f);
+				sprintf (utils.display_text, "m[%d] none", m);
 				utils.ui_display_update (HABITAT_A);
-				state = 1;
+				state = 2;
 				break;
 				}
-			else												// no tmp275
+			else if (mux[m].installed_sensors & TMP275)			// TMP275
 				{
-				sprintf (utils.display_text, "m[%d] no TMP275", m);
+				sprintf (utils.display_text, "m[%d].s[0]       % 3.1f\xDF", m, mux[m].itmp275.data.deg_f);
 				utils.ui_display_update (HABITAT_A);
-				state = 1;
+				if (mux[m].installed_sensors & HDC1080)
+					state = 1;
+				else
+					state = 2;
 				break;
 				}
 
-		case 1:		// mux[m].port[p].sensor[s]
+		case 1:													// HDC1080
+				sprintf (utils.display_text, "m[%d].s[1]       % 3.1f\xDF  % 3.1f%%rh", m, mux[m].ihdc1080.data.deg_f, mux[m].ihdc1080.data.rh);
+				utils.ui_display_update (HABITAT_A);
+				state = 2;
+				break;
+
+		case 2:		// mux[m].port[p].sensor[s]
 			if (mux[m].port[p].has_sensors)						// does port[p] have at least one sensor?
 				{
 				if (0 != mux[m].port[p].sensor[s].addr)			// this sensor present?
 					{
-					sprintf (utils.display_text, "m[%d].p[%d].s[%d]  %6.4f\xDF", m, p, s, mux[m].port[p].sensor[s].itmp275.data.deg_f);
+					sprintf (utils.display_text, "m[%d].p[%d].s[%d]  % 3.1f\xDF", m, p, s, mux[m].port[p].sensor[s].itmp275.data.deg_f);
 					utils.ui_display_update (HABITAT_A);		// display sensor temp
 					s++;										// next sensor
 					if (0 == mux[m].port[p].sensor[s].addr)		// does it exist?
@@ -408,13 +428,13 @@ uint8_t SALT_ext_sensors::show_sensor_temps (void)
 					break;
 					}
 				}
-			else											// port[p] has no sensors
+			else												// port[p] has no sensors
 				{
-				s = 0;										// reset
+				s = 0;											// reset
 				p = 0;
-				m++;										// next mux
+				m++;											// next mux
 				if (!mux[m].exists)
-					m = 0;									// no next mux, reset
+					m = 0;										// no next mux, reset
 				state = 0;
 				break;
 				}
@@ -427,8 +447,6 @@ uint8_t SALT_ext_sensors::show_sensor_temps (void)
 //---------------------------< T M P 2 7 5 _ D A T A _ P T R _ G E T >----------------------------------------
 //
 // returns the address of a TMP275 sensor's data struct or NULL
-//
-// Supports tmp275 sensors only
 //
 
 Systronix_TMP275::data_t* SALT_ext_sensors::tmp275_data_ptr_get (uint8_t m, uint8_t p, uint8_t s)
@@ -443,13 +461,24 @@ Systronix_TMP275::data_t* SALT_ext_sensors::tmp275_data_ptr_get (uint8_t m, uint
 //
 // returns the address of the mux-mounted TMP275 sensor's data struct or NULL
 //
-// Supports tmp275 sensors only
-//
 
 Systronix_TMP275::data_t* SALT_ext_sensors::mux_tmp275_data_ptr_get (uint8_t m)
 	{
 	if (mux[m].installed_sensors & TMP275)							// if there is a sensor at this location
 		return &mux[m].itmp275.data;								// return a pointer to the data struct
+	return NULL;													// NULL pointer else
+	}
+
+
+//---------------------------< M U X _ H D C 1 0 8 0 _ D A T A _ P T R _ G E T >------------------------------
+//
+// returns the address of the mux-mounted HDC1080 sensor's data struct or NULL
+//
+
+Systronix_HDC1080::data_t* SALT_ext_sensors::mux_hdc1080_data_ptr_get (uint8_t m)
+	{
+	if (mux[m].installed_sensors & HDC1080)							// if there is a sensor at this location
+		return &mux[m].ihdc1080.data;								// return a pointer to the data struct
 	return NULL;													// NULL pointer else
 	}
 

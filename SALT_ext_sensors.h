@@ -5,8 +5,12 @@
 //
 //
 
+
+#include <Arduino.h>
+
 #include <Systronix_PCA9548A.h>
 #include <Systronix_TMP275.h>
+#include <Systronix_HDC1080.h>
 #include <Systronix_M24C32.h>
 #include <SALT_utilities.h>
 
@@ -56,6 +60,7 @@ class SALT_ext_sensors
 			Systronix_PCA9548A				imux;			// instance the mux board; we call the destructor for unneeded instances
 			Systronix_M24C32				ieep;			// instance the eeprom (this is a place-holder for now)
 			Systronix_TMP275				itmp275;		// instance the tmp275 temp sensor
+			Systronix_HDC1080				ihdc1080;		// instance the hdc1080 temp and rh sensor
 			struct port_t									// array of multiplexer ports
 				{
 				boolean						has_sensors;	// set true during discovery when sensors are discovered
@@ -80,6 +85,7 @@ class SALT_ext_sensors
 		
 		Systronix_TMP275::data_t*	tmp275_data_ptr_get (uint8_t m, uint8_t p, uint8_t s);
 		Systronix_TMP275::data_t*	mux_tmp275_data_ptr_get (uint8_t m);
+		Systronix_HDC1080::data_t*	mux_hdc1080_data_ptr_get (uint8_t m);
 	};
 
 // We shall constrain the i2c slave address of each mux to be the 9548A base address + the mux[m] array index m
