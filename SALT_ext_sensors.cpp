@@ -368,7 +368,7 @@ uint8_t SALT_ext_sensors::show_sensor_temps (void)
 	switch (state)
 		{
 		case 0:		// mux[m] temp sensor
-			if (!mux[m].installed_sensors)						// no sensors
+			if (!(mux[m].installed_sensors & (TMP275|HDC1080)))	// no supported sensors installed
 				{
 				sprintf (utils.display_text, "m[%d] none", m);
 				utils.ui_display_update (HABITAT_A);
