@@ -41,7 +41,7 @@ uint8_t SALT_ext_sensors::pingex (uint8_t addr, i2c_t3 wire)
 // physical and electrical locations.  See table on sheet 2 of the mux schematics.
 //
 // eeprom mapping?
-// eeprom is 4kx8 and has 128 32-byte pages.  page 0 identifies the assembly
+// eeprom is 4kx8 and has 128 32-byte pages.  page 0 identifies the assembly?
 //	page 0:
 //	  addr: 0: assembly name; 8 char not null terminated but zero-filled
 //			1
@@ -184,9 +184,14 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 			//
 			// for now, this code will write the mounted sensors bit field:
 
-//			mux[m].ieep.set_addr16 (0);
-//			mux[m].ieep.control.wr_byte = TMP275 | HDC1080;
-//			mux[m].ieep.byte_write();
+			mux[m].ieep.set_addr16 (0);				// point to address zero
+			mux[m].ieep.byte_read();				// read it
+			if (0xFF == mux[m].ieep.control.rd_byte)	// if address 0 is 'erased', write a value there
+				{
+				mux[m].ieep.set_addr16 (0);
+				mux[m].ieep.control.wr_byte = TMP275 | HDC1080;
+				mux[m].ieep.byte_write();
+				}
 
 			// TODO: read eeprom to discover what to do next
 
@@ -248,12 +253,23 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 
 			if (MS8607 & mux[m].ieep.control.rd_byte)										// should we expect an MS8607?
 				{
-				if ((SUCCESS == pingex (0x40, Wire1)) && (SUCCESS == pingex (0x76, Wire1)))		//  TODO: use a #define for slave addresses
+				if ((SUCCESS != pingex (0x40, Wire1)) || (SUCCESS != pingex (0x76, Wire1)))		//  TODO: use a #define for slave addresses
 					Serial.printf ("\tmux[%d] MS8607 specified but not detected\n", m);
 				else		// TODO: write enough library support to fill this in
 					{
-					mux[m].installed_sensors |= HDC1080;
-					Serial.printf ("\tmux[%d] MS8607 detected\n", m);
+//					 MS8607 initialization code here
+//					 mux[m].ims8607.setup (Wire1, (char*)"Wire1");							// initialize this sensor instance
+//					 mux[m].ims8607.begin (I2C_PINS_29_30, I2C_RATE_100);
+//					 if (SUCCESS != mux[m].ims8607.init ())									// temperature and humidity mode
+//						{
+//						mux[m].ims8607.~Systronix_MS8607();									// destructor this instance
+						Serial.printf ("\tmux[%d] MS8607 init fail\n", m);
+//						}
+//					else
+//						{
+//						mux[m].installed_sensors |= MS8607;									// note that we found and initialized MS8607
+//						Serial.printf ("\tmux[%d] MS8607 initialized\n", m);
+//						}
 					}
 				}
 			}
