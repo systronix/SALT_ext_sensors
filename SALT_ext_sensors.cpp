@@ -233,7 +233,7 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 					Serial.printf ("\tmux[%d] MS8607 detected; expected HDC1080\n", m);
 				else if (SUCCESS != pingex (0x40, Wire1))
 					Serial.printf ("\tmux[%d] HDC1080 specified but not detected\n", m);
-				else		// TODO: write enough library support to fill this in
+				else
 					{
 					mux[m].ihdc1080.setup (Wire1, (char*)"Wire1");							// initialize this sensor instance
 					mux[m].ihdc1080.begin (I2C_PINS_29_30, I2C_RATE_100);
@@ -260,7 +260,7 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 //					 MS8607 initialization code here
 //					 mux[m].ims8607.setup (Wire1, (char*)"Wire1");							// initialize this sensor instance
 //					 mux[m].ims8607.begin (I2C_PINS_29_30, I2C_RATE_100);
-//					 if (SUCCESS != mux[m].ims8607.init ())									// temperature and humidity mode
+//					 if (SUCCESS != mux[m].ims8607.init ())
 //						{
 //						mux[m].ims8607.~Systronix_MS8607();									// destructor this instance
 						Serial.printf ("\tmux[%d] MS8607 init fail\n", m);
@@ -351,10 +351,10 @@ uint8_t SALT_ext_sensors::sensor_scan (void)
 			if (mux[m].installed_sensors & TMP275)
 				mux[m].itmp275.get_data();								// get the sensor's data
 
-//			if (mux[m].installed_sensors & MS8607)						// only one of these
-//				mux[m].ims8607.get_data();								// get the sensor's data
-			if (mux[m].installed_sensors & HDC1080)
+			if (mux[m].installed_sensors & HDC1080)						// only one of these
 				mux[m].ihdc1080.get_data();								// get the sensor's data
+//			else if (mux[m].installed_sensors & MS8607)
+//				mux[m].ims8607.get_data();								// get the sensor's data
 			}
 		}
 
@@ -383,7 +383,7 @@ uint8_t SALT_ext_sensors::show_sensor_temps (void)
 
 	switch (state)
 		{
-		case 0:		// mux[m] temp sensor
+		case 0:													// mux[m] sensors
 			if (!(mux[m].installed_sensors & (TMP275|HDC1080)))	// no supported sensors installed
 				{
 				sprintf (utils.display_text, "m[%d] none", m);
@@ -391,21 +391,21 @@ uint8_t SALT_ext_sensors::show_sensor_temps (void)
 				state = 2;
 				break;
 				}
-			else if (mux[m].installed_sensors & TMP275)			// TMP275
-				{
+			else if (mux[m].installed_sensors & TMP275)			// TMP275; if not 275 fall through to state 1
+				{												// here when there is a 275 so display
 				sprintf (utils.display_text, "m[%d].s[0]       % 3.1f\xDF", m, mux[m].itmp275.data.deg_f);
 				utils.ui_display_update (HABITAT_A);
-				if (mux[m].installed_sensors & HDC1080)
-					state = 1;
+				if (mux[m].installed_sensors & HDC1080)			// when there is also an HDC1080
+					state = 1;									// next time state 1 to display temp & rh
 				else
-					state = 2;
+					state = 2;									// no HDC1080 so next time port sensors if any
 				break;
 				}
 
-		case 1:													// HDC1080
+		case 1:													// HDC1080 temperature and humidity
 				sprintf (utils.display_text, "m[%d].s[1]       % 3.1f\xDF  % 3.1f%%rh", m, mux[m].ihdc1080.data.deg_f, mux[m].ihdc1080.data.rh);
 				utils.ui_display_update (HABITAT_A);
-				state = 2;
+				state = 2;										// next time start on port sensors if any
 				break;
 
 		case 2:		// mux[m].port[p].sensor[s]
