@@ -48,15 +48,95 @@
 #define	HDC1080			(1<<2)
 
 
+//---------------------------< E E P R O M   M E M O R Y   M A P S >------------------------------------------
+//
+// M24C32 has 128 32-byte pages.  
+//
+// Each page begins with a 'type'.  Types shall be printable ascii uppercase letters A-Z and digits 0-9. There
+// shall be no whitespace and no punctuation except the underscore ('_') character.  Type shall be null terminated
+// so that max type length shall be no more than 15 characters.  When type is less than 15 characters, all eeprom
+// memory locations from the null terminator to the end of the allotted space shall be filled with null bytes ('\0')
+//
+// Byte 0x0000 of each page shall hold a printable upper case letter or digit.  There shall be no blank pages
+// between occupied pagesWhen reading the eeprom, SALT shall stop reading when byte 0x0000 of the current page
+// does not hold an allowed character.
+//
+//
+//----------< C O M M O N >----------
+//
+// These defines are common to all sensor and mux assemblies
+//
+
+#define ASSEMBLY_TYPE			0x0000	// 16 bytes ascii text (A-Z,0-9, and '_') '\0' filled
+
+#define	ASSEMBLY_REV			0x0010	// uint16 size board revision; upper byte is major (M), lower is minor (m) so: M.m
+#define	ASSEMBLY_REV_MINOR		0x0010	// minor part (mm) of MM.mm board revision where mm can be 0 to 99 (uint16_t 0xMMmm)
+#define	ASSEMBLY_REV_MAJOR		0x0011	// major part (MM) of MM.mm board revision where MM can be 0 to 99 (uint16_t 0xMMmm)
+
+#define	ASSEMBLY_MANUF_DATE		0x0012	// uint32_t date of manufacture; a time_t value
+#define	ASSEMBLY_MANUF_DATE_LO	0x0012	// low byte
+#define	ASSEMBLY_MANUF_DATE_ML	0x0013	//
+#define	ASSEMBLY_MANUF_DATE_MH	0x0014	//
+#define	ASSEMBLY_MANUF_DATE_HI	0x0015	// date of manufacture high byte
+
+#define	ASSEMBLY_SERV_DATE		0x0016	// uint32_t date of last service; a time_t value
+#define	ASSEMBLY_SERV_DATE_LO	0x0016	// low byte
+#define	ASSEMBLY_SERV_DATE_ML	0x0017	//
+#define	ASSEMBLY_SERV_DATE_MH	0x0018	//
+#define	ASSEMBLY_SERV_DATE_HI	0x0019	// date of last service high byte
+
+// 0x001A-0x001F (six bytes) not defined
+
+
+//----------< S E N S O R >----------
+
+#define SENSOR1_BASE			0x0020		// all sensors and TMP275 on mux
+#define SENSOR2_BASE			0x0040		// HDC1080 or MS8607 on mux
+//#define SENSOR3_BASE			0x0060		// not yet used
+//#define SENSOR4_BASE			0x0080		// not yet used
+
+// these are offsets from the sensor base addresses above
+//
+// <object>.ieep.set_addr16 (SENSOR_BASE + SENSOR_ADDR);
+//
+
+#define SENSOR_TYPE				0x0000	// 16 bytes ascii text (A-Z,0-9, and '_') '\0' filled
+#define SENSOR_ADDR				0x0010	// i2c addr; msb=1 if addr is absolute; zero if sensor i2c base address that tracks assembly jumper settings (usually 3 lsb)
+
+// 0x0011-0x001F (15 bytes) not defined
+
+
+//---------------------------< C L A S S >--------------------------------------------------------------------
+
 class SALT_ext_sensors
 	{
 	private:
 	protected:
+		union							// a union of two structs and an array for holding the 32 bytes of a eeprom page read
+			{							// after an eeprom read, the information in this union must be used else it may be overwritten
+			struct mux7
+				{
+				char		type_str[16];	// string 'MUX7'; perhaps in future MUX if we add an eep to mux on 8548A common net
+				uint16_t	revision;		// 2.0 as a uint16_t = 0x0200
+				time_t		manuf_date;		// not used in this code
+				time_t		serv_date;		// not used in this code
+				char		unused[6];
+				} as_mux7_struct;
+			struct sensor
+				{
+				char		type_str[16];	// string one of: 'TMP275', 'HDC1080', 'MS8607PT', 'MS8607H'
+				uint8_t		addr;			// sensor i2c address; if msb set, clear it do not OR with mux index [m]
+				char		unused[15];
+				} as_sensor_struct;
+			char			as_array[32];	// use this for ieep.page_read()
+			} eep_page;
+
+	public:
 		struct mux_t										// array of multiplexer boards
 			{
 			boolean							exists;			// set true during discovery
 			boolean							has_sensors;	// set true during discovery when sensors are discovered
-			uint8_t							installed_sensors;	// bitfield 
+			uint8_t							installed_sensors;	// bitfield filled by decoding sensor type from eeprom
 			Systronix_PCA9548A				imux;			// instance the mux board; we call the destructor for unneeded instances
 			Systronix_M24C32				ieep;			// instance the eeprom (this is a place-holder for now)
 			Systronix_TMP275				itmp275;		// instance the tmp275 temp sensor
@@ -76,7 +156,7 @@ class SALT_ext_sensors
 				} port[MAX_PORTS];
 			} mux[MAX_MUXES];
 
-	public:
+//	public:
 		uint8_t		sensor_discover (void);
 		uint8_t		sensor_scan (void);
 		

@@ -42,9 +42,50 @@ uint8_t SALT_ext_sensors::pingex (uint8_t addr, i2c_t3 wire)
 //
 // eeprom mapping?
 // eeprom is 4kx8 and has 128 32-byte pages.  page 0 identifies the assembly?
-//	page 0:
-//	  addr: 0: assembly name; 8 char not null terminated but zero-filled
-//			1
+//
+// page 0:	information about the assembly
+//		0x0000 - 0x000F:	assembly name; 16 characters null filled; known assemblies are:
+//			"TMP275"
+//			"MUX"
+//		0x0010 - 0x0011:	assembly revision; two byte little endian; MM.mm in the form 0xMMmm
+//		0x0010: mm
+//		0x0011: MM
+//		0x0012 - 0x0015:	assembly manufacture date; four byte time_t little endian
+//		0x0016 - 0x0019:	assembly service date; four byte time_t little endian
+//		0x001A - 0x001F:	undefined; 6 bytes
+//
+// page 1:	information about a sensor
+//		0x0020 - 0x002F:	sensor name; 16 characters null filled; known sensors are:
+//			"TMP275"		- temperature
+//			"HDC1080"		- temperature and relative humidity
+//			"MS8607PT"		- the pressure and temperature sensors (i2c address 0x76)
+//			"MS8607H"		- the relative humidity sensor (i2c address 0x40)
+//		0x0030:				sensor i2c address; one byte:
+//								bits 6..0: the i2c address
+//								bit 7:
+//									when 0, the value in bits 6..0 is a base address modified by the assembly's address jumpers
+//									when set, the value in bits 6..0 is an absolute address
+//		0x0031 - 0x003F:	undefined; 15 bytes
+//		
+// page 2:	information about a sensor (same format a page 1; repeat as often as necessary within reason)
+//
+//
+//	[assembly]
+//	# in case we perhaps do the right thing some day and place an eeprom on the same bus as the mux common
+//	type = MUX7
+//	revision = 2.0
+//	manuf date = 2017-08-19
+//	[sensor 1]
+//	type1 = TMP275
+//	# address is two hexadecimal digits
+//	address1 = 48
+//	absolute1 = no
+//	[sensor 2]
+//	type2 = HDC1080
+//	# address is two hexadecimal digits
+//	address2 = 40
+//	absolute2 = yes
+//
 
 
 uint8_t SALT_ext_sensors::sensor_discover (void)
@@ -67,6 +108,8 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 		{
 		sensor_type = TMP275;								// spoof until eeprom code written
 
+																	// perhaps this is a flaw in the design?  The local eeprom is 'hidden'
+																	// on port 7.  Shouldn't it be on the same 'bus' as the mux?
 		mux_addr = PCA9548A_BASE_MIN | (m & 7);						// make 9548A slave address from lowest base addr and mux array index
 		if (SUCCESS != pingex (mux_addr, Wire1))
 			{
@@ -161,11 +204,11 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 			if (SUCCESS != pingex (MUX_EEP_ADDR, Wire1))
 				{
 				Serial.printf ("\tmux[%d] eeprom not detected\n", m);
-//				continue;
+				continue;														// no eeprom so no sensors here; try next mux
 				}
 			else
 				{
-				mux[m].ieep.setup (MUX_EEP_ADDR, Wire1, (char*)"Wire1");			// initialize this sensor instance
+				mux[m].ieep.setup (MUX_EEP_ADDR, Wire1, (char*)"Wire1");		// initialize eeprom instance
 				mux[m].ieep.begin (I2C_PINS_29_30, I2C_RATE_100);
 				mux[m].ieep.init ();
 				Serial.printf ("\tmux[%d] eeprom detected\n", m);
@@ -184,9 +227,13 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 			//
 			// for now, this code will write the mounted sensors bit field:
 
-			mux[m].ieep.set_addr16 (0);				// point to address zero
+			mux[m].ieep.set_addr16 (0);										// point to page 0, address 0
+//			mux[m].ieep.control.rd_wr_len = 32;								// set page size
+//			mux[m].ieep.control.rd_buf_ptr = (uint8_t*)eep_page.as_array;	// point to destinatin buffer
+//			mux[m].ieep.page_read ();										// read the page
+//			mux[m].ieep.control.rd_byte = (uint8_t)(*eep_page.as_array);	// temp for debugging
 			mux[m].ieep.byte_read();				// read it
-			if (0xFF == mux[m].ieep.control.rd_byte)	// if address 0 is 'erased', write a value there
+			if ((TMP275 | HDC1080) != mux[m].ieep.control.rd_byte)	// if address 0 is 'erased' or something else, write a value there
 				{
 				mux[m].ieep.set_addr16 (0);
 				mux[m].ieep.control.wr_byte = TMP275 | HDC1080;
