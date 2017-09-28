@@ -214,46 +214,71 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 				Serial.printf ("\tmux[%d] eeprom detected\n", m);
 				}
 
-			// TODO: define format of whatever information *what information is that?) will be stored in eeprom.
-			// Should the mux eeprom data format be somehow similar to the (undefined) sensor format?  How the
-			// same? How different?
-			// could include:
-			//	number of ports populated
-			//	which of the three supported sensors are mounted
-			//	????
-			//
-			// FOR NOW because we haven't specified anything:
-			//	address 0x00: mounted sensors bit field is the bitwise or of: TMP275, MS8607, HDC1080 (only one or the other of the last two - they share an address)
-			//
-			// for now, this code will write the mounted sensors bit field:
-
+// PROBLEM: Because NAP have put muxes in the field without properly loaded eeproms and because there are also
+// previous versions out there that write 0x05 to address 0 in the eeprom (that was done to get this code working),
+// we somehow have to support those.  There have never been muxes with MS8607 so we only need to worry about
+// systems that have 0xFF or 0x05 in eeprom address 0
 			mux[m].ieep.set_addr16 (0);										// point to page 0, address 0
-//			mux[m].ieep.control.rd_wr_len = 32;								// set page size
-//			mux[m].ieep.control.rd_buf_ptr = (uint8_t*)eep_page.as_array;	// point to destinatin buffer
-//			mux[m].ieep.page_read ();										// read the page
-//			mux[m].ieep.control.rd_byte = (uint8_t)(*eep_page.as_array);	// temp for debugging
-			mux[m].ieep.byte_read();				// read it
-			if ((TMP275 | HDC1080) != mux[m].ieep.control.rd_byte)	// if address 0 is 'erased' or something else, write a value there
+			mux[m].ieep.byte_read();										// read it ('M' is 0x4D
+			if ((0x05 == mux[m].ieep.control.rd_byte) || (0xFF == mux[m].ieep.control.rd_byte))		// if address 0 is 'erased' or 0x05, write a value there
 				{
-				mux[m].ieep.set_addr16 (0);
-				mux[m].ieep.control.wr_byte = TMP275 | HDC1080;
-				mux[m].ieep.byte_write();
+				e7n.exception_add (E7N_UNINIT_MUX__IDX);
+				Serial.printf ("uninitialized MUX eeprom\n");
+				// TODO: change this to an exception
 				}
 
-			// TODO: read eeprom to discover what to do next
+			// here we read eeprom to discover what to do next
+
+			mux[m].installed_sensors = 0;									// init to be safe
+
+			mux[m].ieep.set_addr16 (ASSY_PAGE_ADDR);						// point to page 0, address 0; this is [assembly] page
+			mux[m].ieep.control.rd_wr_len = PAGE_SIZE;						// set page size
+			mux[m].ieep.control.rd_buf_ptr = assy_page.as_array;			// point to destination buffer
+			mux[m].ieep.page_read ();										// read the page
+
+			mux[m].ieep.set_addr16 (SENSOR1_PAGE_ADDR);						// point to page 1, address 0; this is [sensor 1] page
+			mux[m].ieep.control.rd_wr_len = PAGE_SIZE;						// set page size
+			mux[m].ieep.control.rd_buf_ptr = sensor1_page.as_array;			// point to destination buffer
+			mux[m].ieep.page_read ();										// read the page
+
+			if (strcmp (sensor1_page.as_struct.sensor_type, "TMP275"))
+				mux[m].installed_sensors = TMP275;
+			else if (strcmp (sensor1_page.as_struct.sensor_type, "HDC1080"))
+				mux[m].installed_sensors = HDC1080;
+			else if (strcmp (sensor1_page.as_struct.sensor_type, "MS8607"))
+				mux[m].installed_sensors = MS8607;
+			else if (0xFF != *sensor1_page.as_struct.sensor_type)
+				Serial.printf ("unknown [sensor 1] type: %s\n", sensor1_page.as_struct.sensor_type);
+			else
+				Serial.printf ("[sensor 1] type not specified\n");
+
+			if (mux[m].installed_sensors)									// no sensor 2 without sensor 1
+				{
+				mux[m].ieep.set_addr16 (SENSOR2_PAGE_ADDR);						// point to page 2, address 0; this is [sensor 2] page
+				mux[m].ieep.control.rd_wr_len = PAGE_SIZE;						// set page size
+				mux[m].ieep.control.rd_buf_ptr = sensor2_page.as_array;			// point to destination buffer
+				mux[m].ieep.page_read ();										// read the page
+
+				if (strcmp (sensor2_page.as_struct.sensor_type, "TMP275"))
+					mux[m].installed_sensors |= TMP275;
+				else if (strcmp (sensor2_page.as_struct.sensor_type, "HDC1080"))
+					mux[m].installed_sensors |= HDC1080;
+				else if (strcmp (sensor2_page.as_struct.sensor_type, "MS8607"))
+					mux[m].installed_sensors = MS8607;
+				else if (0xFF != *sensor2_page.as_struct.sensor_type)
+					Serial.printf ("unknown [sensor 2] type: %s\n", sensor1_page.as_struct.sensor_type);
+				else
+					Serial.printf ("[sensor 2] type not specified\n");
+				}
 
 			// TODO: if tests on some value(s) stored in eeprom to determine which of the three sensors to use?
 			// If we do that just what is it that gets stored in eeprom?
 			// that same value will be used by the scanner to fetch sensor data
 
-			mux[m].ieep.set_addr16 (0);				// TODO: establish the true and correct address for the mounted sensors bit field
-			mux[m].ieep.byte_read();				// read the value; is it ok to just leave in the control struct?  do we need to save it off somewhere?
 
-			mux[m].installed_sensors = 0;			// init to be safe
+			Serial.printf ("installed_sensors: 0x%.2X\n", mux[m].installed_sensors);
 
-			Serial.printf ("eeprom read: 0x%.2X\n", mux[m].ieep.control.rd_byte);
-
-			if (TMP275 & mux[m].ieep.control.rd_byte)									// should we expect a 275?
+			if (TMP275 & mux[m].installed_sensors)										// should we expect a 275?
 				{
 				if (SUCCESS != pingex (TMP275_SLAVE_ADDR_7, Wire1))						// can we ping it?
 					Serial.printf ("\tmux[%d] TMP275 specified but not detected\n", m);
@@ -265,16 +290,16 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 						{
 						mux[m].itmp275.~Systronix_TMP275();								// destructor this instance
 						Serial.printf ("\tmux[%d] tmp275 init fail\n", m);
+						mux[m].installed_sensors &= ~TMP275;							// remove TMP275 from installed sensors
 						}
 					else
 						{
-						mux[m].installed_sensors = TMP275;								// note that we found and initialized TMP275
 						Serial.printf ("\tmux[%d] TMP275 initialized\n", m);
 						}
 					}
 				}
 
-			if (HDC1080 & mux[m].ieep.control.rd_byte)									// should we expect a 1080?
+			if (HDC1080 & mux[m].installed_sensors)									// should we expect a 1080?
 				{
 				if ((SUCCESS == pingex (0x40, Wire1)) && (SUCCESS == pingex (0x76, Wire1)))		// make sure we aren't accidentally talking to MS8607 TODO: use #defines for slave addresses
 					Serial.printf ("\tmux[%d] MS8607 detected; expected HDC1080\n", m);
@@ -289,16 +314,16 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 						{
 						mux[m].ihdc1080.~Systronix_HDC1080();								// destructor this instance
 						Serial.printf ("\tmux[%d] HDC1080 init fail\n", m);
+						mux[m].installed_sensors &= ~HDC1080;								// remove HDC1080 from installed sensors
 						}
 					else
 						{
-						mux[m].installed_sensors |= HDC1080;								// note that we found and initialized HDC1080
 						Serial.printf ("\tmux[%d] HDC1080 initialized\n", m);
 						}
 					}
 				}
 
-			if (MS8607 & mux[m].ieep.control.rd_byte)										// should we expect an MS8607?
+			if (MS8607 & mux[m].installed_sensors)										// should we expect an MS8607?
 				{
 				if ((SUCCESS != pingex (0x40, Wire1)) || (SUCCESS != pingex (0x76, Wire1)))		//  TODO: use a #define for slave addresses
 					Serial.printf ("\tmux[%d] MS8607 specified but not detected\n", m);
@@ -311,6 +336,7 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 //						{
 //						mux[m].ims8607.~Systronix_MS8607();									// destructor this instance
 						Serial.printf ("\tmux[%d] MS8607 init fail\n", m);
+						mux[m].installed_sensors &= ~MS8607;								// remove MS8607 from installed sensors
 //						}
 //					else
 //						{

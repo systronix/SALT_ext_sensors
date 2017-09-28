@@ -12,6 +12,7 @@
 #include <Systronix_TMP275.h>
 #include <Systronix_HDC1080.h>
 #include <Systronix_M24C32.h>
+#include <SALT_exceptions.h>
 #include <SALT_utilities.h>
 
 
@@ -67,25 +68,34 @@
 // These defines are common to all sensor and mux assemblies
 //
 
-#define ASSEMBLY_TYPE			0x0000	// 16 bytes ascii text (A-Z,0-9, and '_') '\0' filled
+//#define ASSEMBLY_TYPE			0x0000	// 16 bytes ascii text (A-Z,0-9, and '_') '\0' filled
 
-#define	ASSEMBLY_REV			0x0010	// uint16 size board revision; upper byte is major (M), lower is minor (m) so: M.m
-#define	ASSEMBLY_REV_MINOR		0x0010	// minor part (mm) of MM.mm board revision where mm can be 0 to 99 (uint16_t 0xMMmm)
-#define	ASSEMBLY_REV_MAJOR		0x0011	// major part (MM) of MM.mm board revision where MM can be 0 to 99 (uint16_t 0xMMmm)
+//#define	ASSEMBLY_REV			0x0010	// uint16 size board revision; upper byte is major (M), lower is minor (m) so: M.m
+//#define	ASSEMBLY_REV_MINOR		0x0010	// minor part (mm) of MM.mm board revision where mm can be 0 to 99 (uint16_t 0xMMmm)
+//#define	ASSEMBLY_REV_MAJOR		0x0011	// major part (MM) of MM.mm board revision where MM can be 0 to 99 (uint16_t 0xMMmm)
 
-#define	ASSEMBLY_MANUF_DATE		0x0012	// uint32_t date of manufacture; a time_t value
-#define	ASSEMBLY_MANUF_DATE_LO	0x0012	// low byte
-#define	ASSEMBLY_MANUF_DATE_ML	0x0013	//
-#define	ASSEMBLY_MANUF_DATE_MH	0x0014	//
-#define	ASSEMBLY_MANUF_DATE_HI	0x0015	// date of manufacture high byte
+//#define	ASSEMBLY_MANUF_DATE		0x0012	// uint32_t date of manufacture; a time_t value
+//#define	ASSEMBLY_MANUF_DATE_LO	0x0012	// low byte
+//#define	ASSEMBLY_MANUF_DATE_ML	0x0013	//
+//#define	ASSEMBLY_MANUF_DATE_MH	0x0014	//
+//#define	ASSEMBLY_MANUF_DATE_HI	0x0015	// date of manufacture high byte
 
-#define	ASSEMBLY_SERV_DATE		0x0016	// uint32_t date of last service; a time_t value
-#define	ASSEMBLY_SERV_DATE_LO	0x0016	// low byte
-#define	ASSEMBLY_SERV_DATE_ML	0x0017	//
-#define	ASSEMBLY_SERV_DATE_MH	0x0018	//
-#define	ASSEMBLY_SERV_DATE_HI	0x0019	// date of last service high byte
+//#define	ASSEMBLY_SERV_DATE		0x0016	// uint32_t date of last service; a time_t value
+//#define	ASSEMBLY_SERV_DATE_LO	0x0016	// low byte
+//#define	ASSEMBLY_SERV_DATE_ML	0x0017	//
+//#define	ASSEMBLY_SERV_DATE_MH	0x0018	//
+//#define	ASSEMBLY_SERV_DATE_HI	0x0019	// date of last service high byte
 
 // 0x001A-0x001F (six bytes) not defined
+
+// mux-mounted eeprom page size
+
+#define		PAGE_SIZE			32
+
+// base mux-mounted eeprom page addresses
+#define		ASSY_PAGE_ADDR		0
+#define		SENSOR1_PAGE_ADDR	ASSY_PAGE_ADDR+PAGE_SIZE
+#define		SENSOR2_PAGE_ADDR	SENSOR1_PAGE_ADDR+PAGE_SIZE
 
 
 //----------< S E N S O R >----------
@@ -112,24 +122,38 @@ class SALT_ext_sensors
 	{
 	private:
 	protected:
-		union							// a union of two structs and an array for holding the 32 bytes of a eeprom page read
-			{							// after an eeprom read, the information in this union must be used else it may be overwritten
-			struct mux7
+
+//----------< M U X - M O U N T E D   E E P R O M   S E T T I N G S >----------
+//
+// these unions apply to the eeprom mounted on the mux board at port 7.  For now, there is only one of these
+// because I don't know how to apply the information that the eeprom contains
+//
+
+		union
+			{
+			struct mux_settings
 				{
-				char		type_str[16];	// string 'MUX7'; perhaps in future MUX if we add an eep to mux on 8548A common net
-				uint16_t	revision;		// 2.0 as a uint16_t = 0x0200
-				time_t		manuf_date;		// not used in this code
-				time_t		serv_date;		// not used in this code
-				char		unused[6];
-				} as_mux7_struct;
-			struct sensor
+				char		assembly_type[16];		// string 'MUX7'; perhaps in future MUX if we add an eep to mux on 8548A common net
+				uint16_t	assembly_revision;		// 2.0 as a uint16_t = 0x0200
+				time_t		manufacture_date;		// not used in this code
+				time_t		service_date;			// not used in this code; not part of ini file; how set? when set?
+				uint8_t		ports;					// number of ports installed
+				uint8_t		unused[5];				// so that the struct totals 32 bytes
+				} as_struct;
+			uint8_t			as_array[32];
+			} assy_page;
+
+		union
+			{
+			struct sensor_settings
 				{
-				char		type_str[16];	// string one of: 'TMP275', 'HDC1080', 'MS8607PT', 'MS8607H'
-				uint8_t		addr;			// sensor i2c address; if msb set, clear it do not OR with mux index [m]
-				char		unused[15];
-				} as_sensor_struct;
-			char			as_array[32];	// use this for ieep.page_read()
-			} eep_page;
+				char		sensor_type[16];		// string one of: 'TMP275', 'HDC1080', 'MS8607PT', 'MS8607H'
+				uint8_t		sensor_addr;			// sensor i2c address; if msb set, clear it do not OR with mux index [m]
+				uint8_t		unused[15];				// so that the struct totals 32 bytes
+				} as_struct;
+			uint8_t			as_array[32];
+			} sensor1_page, sensor2_page;
+
 
 	public:
 		struct mux_t										// array of multiplexer boards
