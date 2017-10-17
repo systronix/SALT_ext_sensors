@@ -245,7 +245,9 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 				mux[m].installed_sensors = TMP275;
 			else if (strcmp (sensor1_page.as_struct.sensor_type, "HDC1080"))
 				mux[m].installed_sensors = HDC1080;
-			else if (strcmp (sensor1_page.as_struct.sensor_type, "MS8607"))
+			else if (strcmp (sensor1_page.as_struct.sensor_type, "MS8607PT"))
+				mux[m].installed_sensors = MS8607;
+			else if (strcmp (sensor1_page.as_struct.sensor_type, "MS8607H"))
 				mux[m].installed_sensors = MS8607;
 			else if (0xFF != *sensor1_page.as_struct.sensor_type)
 				Serial.printf ("unknown [sensor 1] type: %s\n", sensor1_page.as_struct.sensor_type);
@@ -263,13 +265,16 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 					mux[m].installed_sensors |= TMP275;
 				else if (strcmp (sensor2_page.as_struct.sensor_type, "HDC1080"))
 					mux[m].installed_sensors |= HDC1080;
-				else if (strcmp (sensor2_page.as_struct.sensor_type, "MS8607"))
+				else if (strcmp (sensor2_page.as_struct.sensor_type, "MS8607PT"))
+					mux[m].installed_sensors = MS8607;
+				else if (strcmp (sensor2_page.as_struct.sensor_type, "MS8607H"))
 					mux[m].installed_sensors = MS8607;
 				else if (0xFF != *sensor2_page.as_struct.sensor_type)
 					Serial.printf ("unknown [sensor 2] type: %s\n", sensor1_page.as_struct.sensor_type);
 				else
 					Serial.printf ("[sensor 2] type not specified\n");
 				}
+// TODO: support for third 'sensor' because MS8607 is really two sensors
 
 			// TODO: if tests on some value(s) stored in eeprom to determine which of the three sensors to use?
 			// If we do that just what is it that gets stored in eeprom?
