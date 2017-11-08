@@ -222,7 +222,7 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 			mux[m].ieep.byte_read();										// read it ('M' is 0x4D
 			if ((0x05 == mux[m].ieep.control.rd_byte) || (0xFF == mux[m].ieep.control.rd_byte))		// if address 0 is 'erased' or 0x05, write a value there
 				{
-				e7n.exception_add (E7N_UNINIT_MUX__IDX);
+				e7n.exception_add (E7N_UNINIT_MUX_IDX);
 				Serial.printf ("uninitialized MUX eeprom\n");
 				// TODO: change this to an exception
 				}
