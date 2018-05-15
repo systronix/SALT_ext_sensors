@@ -66,7 +66,7 @@ uint8_t SALT_ext_sensors::pingex (uint8_t addr, i2c_t3 wire)
 //									when 0, the value in bits 6..0 is a base address modified by the assembly's address jumpers
 //									when set, the value in bits 6..0 is an absolute address
 //		0x0031 - 0x003F:	undefined; 15 bytes
-//		
+//
 // page 2:	information about a sensor (same format a page 1; repeat as often as necessary within reason)
 //
 //
@@ -377,6 +377,8 @@ uint8_t SALT_ext_sensors::sensor_scan (void)
 	uint8_t	p;				// indexer into port
 	uint8_t	s;				// indexer into sensor
 
+	char log_msg[64];
+
 	for (m = 0; m < MAX_MUXES; m++)
 		{
 //		Serial.printf ("mux[%d]", m);
@@ -409,7 +411,15 @@ uint8_t SALT_ext_sensors::sensor_scan (void)
 						else											// there are (more) sensors
 							{
 							if (TMP275 == mux[m].port[p].sensor[s].type)
-								mux[m].port[p].sensor[s].itmp275.get_data();	// get the sensor's data
+								if (SUCCESS != mux[m].port[p].sensor[s].itmp275.get_data())	// attempt to get the sensor's data
+									{
+									if (!e7n.e7n_msg[E7N_EXT_TEMP_FAULT_IDX].queued)	// if not yet queued
+										{												// once any single sensor is queued other sensor faults not logged
+										e7n.exception_add (E7N_EXT_TEMP_FAULT_IDX);		// unable to read this sensor
+										sprintf (log_msg, "%s @ mux[%d].port[%d].sensor[%d]", (char*)e7n.e7n_msg [E7N_EXT_TEMP_FAULT_IDX].l, m, p, s);
+										logs.log_event (log_msg);						// log it
+										}
+									}
 							}
 						}
 					}
@@ -423,16 +433,44 @@ uint8_t SALT_ext_sensors::sensor_scan (void)
 			{
 			if (SUCCESS != mux[m].imux.control_write (mux[m].imux.port[7]))	// enable access to mux[m].port[7]
 				{
-				Serial.printf ("mux[%d].imux.control_write (mux[%d].imux.port[7]) fail (0x%.02X)", m, m, mux[m].imux.port[7]);
+				if (!e7n.e7n_msg[E7N_MUX_FAULT_IDX].queued)				// if not yet queued
+					{
+					e7n.exception_add (E7N_MUX_FAULT_IDX);				// unable to set the multiplexer
+					sprintf (log_msg, "%s @ mux[%d]", (char*)e7n.e7n_msg [E7N_MUX_FAULT_IDX].l, m);
+					logs.log_event (log_msg);							// log it
+					}
 				break;													// serious problem if we can't switch the multiplexer  TODO: what to do?
 				}
 			if (mux[m].installed_sensors & TMP275)
-				mux[m].itmp275.get_data();								// get the sensor's data
+				if (SUCCESS != mux[m].itmp275.get_data())				// attempt to get the sensor's data
+					if (!e7n.e7n_msg[E7N_MUX_TSNSR_FAULT_IDX].queued)	// if not yet queued
+						{
+						e7n.exception_add (E7N_MUX_TSNSR_FAULT_IDX);	// unable to read this sensor
+						sprintf (log_msg, "%s @ mux[%d]", (char*)e7n.e7n_msg [E7N_MUX_TSNSR_FAULT_IDX].l, m);
+						logs.log_event (log_msg);						// log it
+						}
 
 			if (mux[m].installed_sensors & HDC1080)						// only one of these
-				mux[m].ihdc1080.get_data();								// get the sensor's data
+				if (SUCCESS != mux[m].ihdc1080.get_data())				// attempt to get the sensor's data
+					{
+					if (!e7n.e7n_msg[E7N_MUX_HSNSR_FAULT_IDX].queued)	// if not yet queued
+						{
+						e7n.exception_add (E7N_MUX_HSNSR_FAULT_IDX);	// unable to read this sensor
+						sprintf (log_msg, "%s @ mux[%d]", (char*)e7n.e7n_msg [E7N_MUX_HSNSR_FAULT_IDX].l, m);
+						logs.log_event (log_msg);						// log it
+						}
+					}
+// MS8607 NOT SUPPORTED; EXCEPTION HANDLING NOT SUPPORTED
 //			else if (mux[m].installed_sensors & MS8607)
-//				mux[m].ims8607.get_data();								// get the sensor's data
+//				if (SUCCESS != mux[m].ims8607.get_data())				// attempt to get the sensor's data
+//					{
+//					if (!e7n.e7n_msg[E7N_MUX_THSNSR_FAULT_IDX].queued)	// if not yet queued
+//						{
+//						e7n.exception_add (E7N_MUX_THSNSR_FAULT_IDX);	// unable to read this sensor
+//						sprintf (log_msg, "%s @ mux[%d]", (char*)e7n.e7n_msg [E7N_MUX_THSNSR_FAULT_IDX].l, m);
+//						logs.log_event (log_msg);						// log it
+//						}
+//					}
 			}
 		}
 

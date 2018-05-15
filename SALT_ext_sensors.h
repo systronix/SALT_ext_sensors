@@ -14,6 +14,7 @@
 #include <Systronix_M24C32.h>
 #include <SALT_exceptions.h>
 #include <SALT_utilities.h>
+#include <SALT_logging.h>
 
 
 //---------------------------< D E F I N E S >----------------------------------------------------------------
