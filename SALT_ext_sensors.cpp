@@ -283,6 +283,11 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 
 			Serial.printf ("installed_sensors: 0x%.2X\n", mux[m].installed_sensors);
 
+			if (HDC1080 & mux[m].installed_sensors)
+				{																		// disable HDC1080 because second hsensor startup exception
+				mux[m].installed_sensors &= ~HDC1080;									// discovered by NAP in SBS system; this 'fix' 2019-07-24
+				}																		// says tells SALT that there isn't a second sensor on mux boards
+
 			if (TMP275 & mux[m].installed_sensors)										// should we expect a 275?
 				{
 				if (SUCCESS != pingex (TMP275_SLAVE_ADDR_7, Wire1))						// can we ping it?
