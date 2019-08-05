@@ -281,12 +281,7 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 			// that same value will be used by the scanner to fetch sensor data
 
 
-			Serial.printf ("installed_sensors: 0x%.2X\n", mux[m].installed_sensors);
-
-			if (HDC1080 & mux[m].installed_sensors)
-				{																		// disable HDC1080 because second hsensor startup exception
-				mux[m].installed_sensors &= ~HDC1080;									// discovered by NAP in SBS system; this 'fix' 2019-07-24
-				}																		// says tells SALT that there isn't a second sensor on mux boards
+//			Serial.printf ("installed_sensors: 0x%.2X\n", mux[m].installed_sensors);
 
 			if (TMP275 & mux[m].installed_sensors)										// should we expect a 275?
 				{
@@ -309,7 +304,7 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 					}
 				}
 
-			if (HDC1080 & mux[m].installed_sensors)									// should we expect a 1080?
+			if (HDC1080 & mux[m].installed_sensors)											// should we expect a 1080?
 				{
 				if ((SUCCESS == pingex (0x40, Wire1)) && (SUCCESS == pingex (0x76, Wire1)))		// make sure we aren't accidentally talking to MS8607 TODO: use #defines for slave addresses
 					Serial.printf ("\tmux[%d] MS8607 detected; expected HDC1080\n", m);
@@ -333,7 +328,7 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 					}
 				}
 
-			if (MS8607 & mux[m].installed_sensors)										// should we expect an MS8607?
+			if (MS8607 & mux[m].installed_sensors)											// should we expect an MS8607?
 				{
 				if ((SUCCESS != pingex (0x40, Wire1)) || (SUCCESS != pingex (0x76, Wire1)))		//  TODO: use a #define for slave addresses
 					Serial.printf ("\tmux[%d] MS8607 specified but not detected\n", m);
@@ -359,7 +354,7 @@ uint8_t SALT_ext_sensors::sensor_discover (void)
 		else
 			break;
 
-		mux[m].imux.control_write (PCA9548A_PORTS_DISABLE);			// disable access to mux[m] ports
+		mux[m].imux.control_write (PCA9548A_PORTS_DISABLE);									// disable access to mux[m] ports so that multiple muxes aren't accessed in parallel
 		}
 
 	Serial.printf ("discovery done (%ldmS)\n", millis() - start);
@@ -405,6 +400,7 @@ uint8_t SALT_ext_sensors::sensor_scan (void)
 				else													// there are sensors on this port
 					{
 					mux[m].imux.control_write (mux[m].imux.port[p]);	// enable access to mux[m].port[p]
+
 					for (s = 0; s < MAX_SENSORS; s++)
 						{
 //						Serial.printf (".sensor[%d]\n", s);
@@ -430,13 +426,14 @@ uint8_t SALT_ext_sensors::sensor_scan (void)
 					}
 				}
 			}
+		mux[m].imux.control_write (PCA9548A_PORTS_DISABLE);				// disable access to mux[m] ports so that multiple muxes aren't accessed in parallel
 		}
 
 	for (m = 0; m < MAX_MUXES; m++)										// here we scan mux-mounted sensors
 		{
 		if (mux[m].exists)												// on muxes that exist
 			{
-			if (SUCCESS != mux[m].imux.control_write (mux[m].imux.port[7]))	// enable access to mux[m].port[7]
+			if (SUCCESS != mux[m].imux.control_write (mux[m].imux.port[7]))		// enable access to mux[m].port[7]
 				{
 				if (!e7n.e7n_msg[E7N_MUX_FAULT_IDX].queued)				// if not yet queued
 					{
@@ -476,6 +473,7 @@ uint8_t SALT_ext_sensors::sensor_scan (void)
 //						logs.log_event (log_msg);						// log it
 //						}
 //					}
+			mux[m].imux.control_write (PCA9548A_PORTS_DISABLE);			// disable access to mux[m] ports so that multiple muxes aren't accessed in parallel
 			}
 		}
 
